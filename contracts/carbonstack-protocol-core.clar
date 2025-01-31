@@ -87,8 +87,9 @@
     (let
         (
             (caller tx-sender)
+            (existing-device (map-get? devices {device-id: device-id}))
         )
-        (asserts! (not (map-get? devices {device-id: device-id})) ERR_ALREADY_EXISTS)
+        (asserts! (is-none existing-device) ERR_ALREADY_EXISTS)
         (map-insert devices
             {device-id: device-id}
             {
