@@ -1,5 +1,22 @@
 ;; CarbonStack Protocol - Core Smart Contracts
 
+;; Define NFT Trait
+(define-trait carbon-credit-trait
+    (
+        ;; Transfer token to a specified principal
+        (transfer (uint principal principal) (response bool uint))
+        
+        ;; Get the owner of a specific token ID
+        (get-owner (uint) (response principal uint))
+        
+        ;; Get the last token ID
+        (get-last-token-id () (response uint uint))
+        
+        ;; Get token URI
+        (get-token-uri (uint) (response (optional (string-utf8 256)) uint))
+    )
+)
+
 ;; Constants and Configurations
 (define-constant CONTRACT_OWNER tx-sender)
 (define-constant ERR_UNAUTHORIZED (err u100))
@@ -29,7 +46,8 @@
         verification-status: bool,
         issuance-height: uint,
         offset-type: (string-ascii 32),
-        metadata: (string-ascii 256)
+        metadata: (string-ascii 256),
+        uri: (optional (string-utf8 256))
     }
 )
 
@@ -42,9 +60,6 @@
         last-active: uint
     }
 )
-
-;; SIP-009 NFT Interface Implementation
-(impl-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
 ;; State Variables
 (define-data-var credit-counter uint u0)
@@ -95,6 +110,7 @@
     (amount uint)
     (offset-type (string-ascii 32))
     (metadata (string-ascii 256))
+    (uri (optional (string-utf8 256)))
 )
     (let
         (
@@ -114,7 +130,8 @@
                 verification-status: false,
                 issuance-height: block-height,
                 offset-type: offset-type,
-                metadata: metadata
+                metadata: metadata,
+                uri: uri
             }
         )
         
@@ -128,6 +145,40 @@
         
         (var-set credit-counter new-id)
         (ok new-id)
+    )
+)
+
+;; NFT Trait Implementation
+(define-public (transfer (credit-id uint) (sender principal) (recipient principal))
+    (let
+        (
+            (credit (unwrap! (map-get? carbon-credits {credit-id: credit-id}) ERR_NOT_FOUND))
+        )
+        (asserts! (is-eq (get owner credit) sender) ERR_UNAUTHORIZED)
+        (asserts! (is-eq tx-sender sender) ERR_UNAUTHORIZED)
+        (map-set carbon-credits
+            {credit-id: credit-id}
+            (merge credit {owner: recipient})
+        )
+        (ok true)
+    )
+)
+
+(define-read-only (get-owner (credit-id uint))
+    (match (map-get? carbon-credits {credit-id: credit-id})
+        credit (ok (get owner credit))
+        ERR_NOT_FOUND
+    )
+)
+
+(define-read-only (get-last-token-id)
+    (ok (var-get credit-counter))
+)
+
+(define-read-only (get-token-uri (credit-id uint))
+    (match (map-get? carbon-credits {credit-id: credit-id})
+        credit (ok (get uri credit))
+        ERR_NOT_FOUND
     )
 )
 
@@ -158,25 +209,6 @@
                     last-active: block-height
                 }
             )
-        )
-        (ok true)
-    )
-)
-
-;; Trading Functions
-(define-public (transfer-credit
-    (credit-id uint)
-    (recipient principal)
-)
-    (let
-        (
-            (caller tx-sender)
-            (credit (unwrap! (map-get? carbon-credits {credit-id: credit-id}) ERR_NOT_FOUND))
-        )
-        (asserts! (is-eq (get owner credit) caller) ERR_UNAUTHORIZED)
-        (map-set carbon-credits
-            {credit-id: credit-id}
-            (merge credit {owner: recipient})
         )
         (ok true)
     )
